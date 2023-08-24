@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Note Taking App</title>
+  <style>
+     #app-heading {
+      text-align:center;
+      margin-bottom: 200px;
+      color: #333;
+      font-size: 2.5rem;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    #notes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      gap: 20px;
+      max-width: 1200px;
+      width: 200px;
+      padding: 40px;
+      margin: 0 auto;
+    }
+
+    .note {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .note:hover {
+      transform: translateY(-5px);
+      box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .note h2 {
+      font-size: 1.6rem;
+      margin: 0 0 10px;
+    }
+
+    .note p {
+      color: #777;
+      margin: 0;
+    }
+
+    #note-popup {
+      background-color: rgba(0, 0, 0, 0.5);
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+
+    .popup-content {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+      padding: 20px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .popup-content input[type="text"],
+  .popup-content textarea {
+    width: 100%;
+    padding: 15px; /* Increase padding for a larger box */
+    font-size: 1.2rem; /* Increase font size */
+    border: 1px solid #ccc;
+    border-radius: 5px;
+  }
+
+    .popup-content input,
+    .popup-content textarea,
+    .popup-content button {
+      display: block;
+      margin: 10px 0;
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+
+    .popup-content button {
+      background-color: #007bff;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .popup-content button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+  
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+  
+    const db1 = firebase.firestore();
+  
+  </script>
+  
+</head>
+<body>
+   <div id="app-heading">
+    <h1>Note Taking App</h1>
+  </div>
+  <div id="notes-grid">
+    <!-- Notes will be displayed here -->
+  </div>
+  
+  
+  <!-- Pop-up for editing notes -->
+  <div id="note-popup">
+    <input id="edit-title" type="text" placeholder="Title">
+    <input id="edit-tagline" type="text" placeholder="Tagline">
+    <textarea id="edit-body" placeholder="Body"></textarea>
+    <button id="save-button">Save</button>
+    <button id="new-note-button">New Note</button>
+    <label for="edit-pinned">Pinned:</label>
+    <input id="edit-pinned" type="checkbox">
+    <div id="pagination">
+      <button id="prev-button">Previous</button>
+      <button id="next-button">Next</button>
+    </div>
+    
+
+  </div>
+  
+  <script>
+    // Your JavaScript code here
+    const notesGrid = document.getElementById('notes-grid');
+const notePopup = document.getElementById('note-popup');
+const editTitle = document.getElementById('edit-title');
+const editTagline = document.getElementById('edit-tagline');
+const editBody = document.getElementById('edit-body');
+const saveButton = document.getElementById('save-button');
+const newNoteButton = document.getElementById('new-note-button');
+
+// Fetch and display notes
+function fetchNotes(page) {
+  const pageSize = 6;
+  const startAfter = page ? page * pageSize : null;
+
+  const query = db.collection("notes")
+    .orderBy("pinned", "desc")
+    .orderBy("timestamp", "desc")
+    .startAfter(startAfter) // Add this line for pagination
+    .limit(pageSize);
+
+  query.get()
+    .then(snapshot => {
+      notesGrid.innerHTML = '';
+      snapshot.forEach(doc => {
+        const note = doc.data();
+        const noteElement = document.createElement('div');
+        noteElement.classList.add('note');
+        noteElement.innerHTML = `<h2>${note.title}</h2><p>${note.tagline}</p>`;
+        
+        noteElement.addEventListener('click', () => openNotePopup(note));
+        
+        notesGrid.appendChild(noteElement);
+      });
+    });
+}
+
+
+// Open pop-up for editing notes
+function openNotePopup(note) {
+  editTitle.value = note.title;
+  editTagline.value = note.tagline;
+  editBody.value = note.body;
+  
+  saveButton.onclick = () => saveNoteChanges(note.id);
+  
+  notePopup.style.display = 'block';
+}
+
+// Save changes to a note
+function saveNoteChanges(noteId) {
+  const updatedNote = {
+    title: editTitle.value,
+    tagline: editTagline.value,
+    body: editBody.value
+  };
+  
+  // Send updated note to API endpoint
+  fetch(`/api/notes/${noteId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(updatedNote)
+  })
+  .then(() => {
+    notePopup.style.display = 'none';
+    fetchNotes(); // Refresh notes grid
+  });
+}
+
+// Initial fetch of notes
+fetchNotes();
+const functions = require('firebase-functions');
+const admin = require('firebase-admin');
+admin.initializeApp();
+const db = admin.firestore();
+
+// Get a specific page of notes
+exports.getNotes = functions.https.onRequest((req, res) => {
+  const pageSize = 6;
+  const startAfter = req.query.startAfter || null;
+  
+  let query = db.collection('notes')
+    .orderBy('pinned', 'desc')
+    .orderBy('timestamp', 'desc')
+    .limit(pageSize);
+  
+  if (startAfter) {
+    query = query.startAfter(startAfter);
+  }
+  
+  query.get()
+    .then(snapshot => {
+      const notes = [];
+      snapshot.forEach(doc => {
+        notes.push({ id: doc.id, ...doc.data() });
+      });
+      res.json(notes);
+    })
+    .catch(error => {
+      res.status(500).send('Error fetching notes: ' + error);
+    });
+});
+
+// Update a note
+exports.updateNote = functions.https.onRequest((req, res) => {
+  const noteId = req.params.noteId;
+  const updatedNote = req.body;
+  
+  db.collection('notes').doc(noteId).update(updatedNote)
+    .then(() => {
+      res.send('Note updated successfully');
+    })
+    .catch(error => {
+      res.status(500).send('Error updating note: ' + error);
+    });
+});
+function clearNoteFields() {
+  editTitle.value = '';
+  editTagline.value = '';
+  editBody.value = '';
+}
+
+// Open pop-up for creating a new note
+function openNewNotePopup() {
+  clearNoteFields();
+  saveButton.onclick = saveNewNote;
+  notePopup.style.display = 'block';
+}
+const prevButton = document.getElementById('prev-button');
+const nextButton = document.getElementById('next-button');
+let currentPage = 0;
+
+prevButton.addEventListener('click', () => {
+  if (currentPage > 0) {
+    currentPage--;
+    fetchNotes(currentPage);
+  }
+});
+
+nextButton.addEventListener('click', () => {
+  currentPage++;
+  fetchNotes(currentPage);
+});
+
+// ...
+
+// Initial fetch of notes
+fetchNotes(currentPage);
+
+
+
+
+// Save a new note
+function saveNewNote() {
+  const newNote = {
+    title: editTitle.value,
+    tagline: editTagline.value,
+    body: editBody.value
+  };
+
+  // Send new note to API endpoint
+  fetch('/api/notes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(newNote)
+  })
+  .then(() => {
+    notePopup.style.display = 'none';
+    fetchNotes(); // Refresh notes grid
+  });
+}
+
+// ...
+
+// Open pop-up for editing notes
+function openNotePopup(note) {
+  editTitle.value = note.title;
+  editTagline.value = note.tagline;
+  editBody.value = note.body;
+
+  saveButton.onclick = () => saveNoteChanges(note.id);
+  newNoteButton.style.display = 'none'; // Hide new note button
+
+  notePopup.style.display = 'block';
+}
+
+// ...
+
+// Event listener for new note button
+newNoteButton.addEventListener('click', openNewNotePopup);
+
+// Initial fetch of notes
+fetchNotes();
+
+
+  </script>
+  <!-- Add this before </body> -->
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js"></script>
+
+</body>
+</html>
